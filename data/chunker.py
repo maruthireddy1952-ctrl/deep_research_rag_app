@@ -1,15 +1,26 @@
+import re
 def chunk_text(text, size=500, overlap=50):
 
-    chunks = []
-    start = 0
+    sections = re.split(r'(?=\n?\d+\.\s)', text)
 
-    while start < len(text):
+    final_chunks = []
 
-        end = start + size
-        chunk = text[start:end]
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
 
-        chunks.append(chunk)
+        # Step 2: If section is small, keep as is
+        if len(section) <= size:
+            final_chunks.append(section)
+        else:
+            # Step 3: Apply chunking within large sections
+            start = 0
+            while start < len(section):
+                end = start + size
+                chunk = section[start:end]
 
-        start += size - overlap
+                final_chunks.append(chunk)
+                start += size - overlap
 
-    return chunks
+    return final_chunks

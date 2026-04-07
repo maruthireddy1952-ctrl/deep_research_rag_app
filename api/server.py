@@ -4,28 +4,44 @@ from pydantic import BaseModel
 from embeddings.embedder import Embedder
 from retriever.faiss_index import FaissIndex
 from generator.llm import generate_answer
+from retriever.bm25_index import BM25Index
+from data.ingest import ingest_pdf
+
 
 app = FastAPI()
 
+pdf_chunks = ingest_pdf("data/documents/startup_report.pdf")
 embedder = Embedder()
 
-# Example dummy data (later we load real docs)
-documents = [
-    "Many SaaS startups fail after Series A due to poor unit economics.",
-    "A common startup failure reason is high customer acquisition cost.",
-    "Startups often collapse when they scale before achieving product-market fit."
-]
-
-# Build embeddings
+documents = pdf_chunks
 embeddings = embedder.embed(documents)
 
-# Create FAISS index
 index = FaissIndex(len(embeddings[0]))
 index.add(embeddings, documents)
+
+bm25_index = BM25Index(documents)
 
 
 class QueryRequest(BaseModel):
     question: str
+
+
+def hybrid_search(question, query_embedding):
+
+    vector_results = index.search(query_embedding, k=3)
+    keyword_results = bm25_index.search(question, k=3)
+
+    combined = []
+
+    for doc in vector_results:
+        if doc not in combined:
+            combined.append(doc)
+
+    for doc in keyword_results:
+        if doc not in combined:
+            combined.append(doc)
+
+    return combined[:5]
 
 
 @app.post("/ask")
@@ -33,7 +49,7 @@ def ask_question(query: QueryRequest):
 
     query_embedding = embedder.embed([query.question])[0]
 
-    retrieved_chunks = index.search(query_embedding)
+    retrieved_chunks = hybrid_search(query.question, query_embedding)
 
     context = "\n".join(retrieved_chunks)
 
