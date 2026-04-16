@@ -6,13 +6,14 @@ from retriever.faiss_index import FaissIndex
 from generator.llm import generate_answer
 from retriever.bm25_index import BM25Index
 from data.ingest import ingest_pdf
-
+from retriever.reranker import Reranker
 
 app = FastAPI()
 
 pdf_chunks = ingest_pdf("data/documents/startup_report.pdf")
+print(len(pdf_chunks),"holaa")
 embedder = Embedder()
-
+reranker=Reranker()
 documents = pdf_chunks
 embeddings = embedder.embed(documents)
 
@@ -49,14 +50,22 @@ def ask_question(query: QueryRequest):
 
     query_embedding = embedder.embed([query.question])[0]
 
+    # retrieved_chunks = hybrid_search(query.question, query_embedding)
+    
     retrieved_chunks = hybrid_search(query.question, query_embedding)
 
-    context = "\n".join(retrieved_chunks)
+    reranked_chunks = reranker.rerank(
+            query.question,
+            retrieved_chunks,
+            top_k=3
+        )
 
+    context = "\n".join(reranked_chunks)
+    
     answer = generate_answer(query.question, context)
 
     return {
         "question": query.question,
         "answer": answer,
-        "sources": retrieved_chunks
+        "sources": reranked_chunks
     }
