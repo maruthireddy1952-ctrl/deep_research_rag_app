@@ -18,5 +18,13 @@ if st.button("Ask"):
     st.write(result["answer"])
 
     st.subheader("Sources")
+
     for source in result["sources"]:
         st.write("-", source)
+
+    st.subheader("Retrieval Debug Info")
+
+    st.write("Retrieval Attempts:", result["retrieval_attempts"])
+
+    if result["query_rewritten"]:
+        st.write("Query Rewritten To:", result["query_rewritten"])

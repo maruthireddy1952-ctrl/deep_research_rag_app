@@ -7,7 +7,8 @@ from generator.llm import generate_answer
 from retriever.bm25_index import BM25Index
 from data.ingest import ingest_pdf
 from retriever.reranker import Reranker
-
+from evaluation.retrieval_evaluator import evaluate_retrieval
+from retriever.query_rewriter import rewrite_query
 app = FastAPI()
 
 pdf_chunks = ingest_pdf("data/documents/startup_report.pdf")
@@ -48,24 +49,42 @@ def hybrid_search(question, query_embedding):
 @app.post("/ask")
 def ask_question(query: QueryRequest):
 
-    query_embedding = embedder.embed([query.question])[0]
-
-    # retrieved_chunks = hybrid_search(query.question, query_embedding)
     
-    retrieved_chunks = hybrid_search(query.question, query_embedding)
 
-    reranked_chunks = reranker.rerank(
-            query.question,
-            retrieved_chunks,
-            top_k=3
-        )
+    original_query = query.question
+
+    query_embedding = embedder.embed([original_query])[0]
+
+    retrieved_chunks = hybrid_search(original_query, query_embedding)
+
+    reranked_chunks = reranker.rerank(original_query, retrieved_chunks)
+
+    good = evaluate_retrieval(original_query, reranked_chunks)
+
+    retrieval_attempts = 1
+    rewritten_query = None
+
+    if not good:
+
+        rewritten_query = rewrite_query(original_query)
+
+        new_embedding = embedder.embed([rewritten_query])[0]
+
+        retrieved_chunks = hybrid_search(rewritten_query, new_embedding)
+
+        reranked_chunks = reranker.rerank(rewritten_query, retrieved_chunks)
+
+        retrieval_attempts += 1
 
     context = "\n".join(reranked_chunks)
-    
-    answer = generate_answer(query.question, context)
+
+    answer = generate_answer(original_query, context)
 
     return {
-        "question": query.question,
+        "question": original_query,
         "answer": answer,
-        "sources": reranked_chunks
+        "sources": reranked_chunks,
+        "retrieval_attempts": retrieval_attempts,
+        "query_rewritten": rewritten_query,
+        "retrieval_success": good
     }
