@@ -9,6 +9,7 @@ from data.ingest import ingest_pdf
 from retriever.reranker import Reranker
 from evaluation.retrieval_evaluator import evaluate_retrieval
 from retriever.query_rewriter import rewrite_query
+from evaluation.confidence import compute_confidence
 app = FastAPI()
 
 pdf_chunks = ingest_pdf("data/documents/startup_report.pdf")
@@ -48,43 +49,45 @@ def hybrid_search(question, query_embedding):
 
 @app.post("/ask")
 def ask_question(query: QueryRequest):
+    attempts = 0
 
-    
+    try:
+        original_query = query.question
 
-    original_query = query.question
+        query_embedding = embedder.embed([original_query])[0]
 
-    query_embedding = embedder.embed([original_query])[0]
+        retrieved = hybrid_search(original_query, query_embedding)
 
-    retrieved_chunks = hybrid_search(original_query, query_embedding)
+        reranked_chunks, scores = reranker.rerank(original_query, retrieved)
 
-    reranked_chunks = reranker.rerank(original_query, retrieved_chunks)
+        good = evaluate_retrieval(original_query, reranked_chunks)
 
-    good = evaluate_retrieval(original_query, reranked_chunks)
+        if not good:
+            attempts += 1
+            new_query = rewrite_query(original_query)
 
-    retrieval_attempts = 1
-    rewritten_query = None
+            new_embedding = embedder.embed([new_query])[0]
 
-    if not good:
+            retrieved = hybrid_search(new_query, new_embedding)
 
-        rewritten_query = rewrite_query(original_query)
+            reranked_chunks, scores = reranker.rerank(new_query, retrieved)
 
-        new_embedding = embedder.embed([rewritten_query])[0]
+        context = "\n".join(reranked_chunks)
 
-        retrieved_chunks = hybrid_search(rewritten_query, new_embedding)
+        answer = generate_answer(original_query, context)
 
-        reranked_chunks = reranker.rerank(rewritten_query, retrieved_chunks)
+        confidence = compute_confidence(scores, attempts)
 
-        retrieval_attempts += 1
+        return {
+            "question": original_query,
+            "answer": answer,
+            "sources": reranked_chunks,
+            "confidence": confidence,
+            "attempts": attempts
+        }
 
-    context = "\n".join(reranked_chunks)
-
-    answer = generate_answer(original_query, context)
-
-    return {
-        "question": original_query,
-        "answer": answer,
-        "sources": reranked_chunks,
-        "retrieval_attempts": retrieval_attempts,
-        "query_rewritten": rewritten_query,
-        "retrieval_success": good
-    }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "question": getattr(query, "question", None)
+        }

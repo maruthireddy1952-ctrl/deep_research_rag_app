@@ -21,10 +21,14 @@ if st.button("Ask"):
 
     for source in result["sources"]:
         st.write("-", source)
+    st.subheader("Confidence")
+    st.write(result["confidence"])
 
-    st.subheader("Retrieval Debug Info")
+    st.subheader("Retrieval Attempts")
+    st.write(result["attempts"])
+    # st.subheader("Retrieval Debug Info")
 
-    st.write("Retrieval Attempts:", result["retrieval_attempts"])
+    # st.write("Retrieval Attempts:", result["retrieval_attempts"])
 
-    if result["query_rewritten"]:
-        st.write("Query Rewritten To:", result["query_rewritten"])
+    # if result["query_rewritten"]:
+    #     st.write("Query Rewritten To:", result["query_rewritten"])

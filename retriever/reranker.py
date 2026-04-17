@@ -20,4 +20,9 @@ class Reranker:
             reverse=True
         )
 
-        return [chunk for chunk, _ in ranked[:top_k]]
+        top_chunks = ranked[:top_k]
+
+        chunks = [c for c, s in top_chunks]
+        scores = [float(s) for c, s in top_chunks]
+
+        return chunks, scores
